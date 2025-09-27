@@ -7,9 +7,24 @@ A guide for training and deploying your own Whisper model for Persian speech rec
 - **Live Demo**: [Try the model online](https://huggingface.co/spaces/AmirMohseni/Whisper-small-Farsi)
 - **Trained Model**: [Download from Hugging Face](https://huggingface.co/AmirMohseni/whisper-small-persian)
 
-## Setup
+## 📋 Prerequisites
 
-### Environment Setup
+### Quick Setup (Recommended)
+
+Run the automated setup script:
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+This will:
+- ✅ Create and activate a virtual environment
+- ✅ Install all required dependencies
+- ✅ Create `.env` file from template
+- ✅ Set up your environment for training
+
+### Manual Setup (Alternative)
 
 ```bash
 # Create and activate virtual environment
@@ -18,22 +33,24 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 uv pip install -r requirements.txt
+
+# Set up environment file
+cp .env.example .env
+# Edit .env file with your Hugging Face token
 ```
 
 ### Authentication
 
-Set up your Hugging Face token for model publishing:
+**You need a Hugging Face token to publish models:**
 
-```bash
-# Option 1: Export token
-export HF_TOKEN="your_token_here"
+1. Go to [Hugging Face Settings > Tokens](https://huggingface.co/settings/tokens)
+2. Create a new token with "Write" permissions
+3. Add it to your `.env` file:
+   ```bash
+   HF_TOKEN=your_actual_token_here
+   ```
 
-# Option 2: Create .env file
-cp .env.example .env
-echo "HF_TOKEN=your_token_here" > .env
-```
-
-Get your token from [Hugging Face Settings](https://huggingface.co/settings/tokens).
+The setup script will create the `.env` file for you, just replace `your_token_here` with your actual token.
 
 ## 🎯 Training
 
