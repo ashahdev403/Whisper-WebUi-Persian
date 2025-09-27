@@ -1,0 +1,10 @@
+transformers==4.48.0
+datasets[audio]
+accelerate
+evaluate
+jiwer
+gradio
+wandb
+torch
+numpy
+pyyaml

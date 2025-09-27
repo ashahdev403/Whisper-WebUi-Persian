@@ -1,0 +1,63 @@
+# Whisper Persian Fine-tuning Configuration
+
+# Dataset Configuration
+dataset:
+  name: "MohammadGholizadeh/fleurs-farsi"
+  train_split: "train[:50%]"
+  test_split: "dev[:50%]"
+  audio_column: "audio"
+  text_column: "transcription"
+  target_sample_rate: 16000
+
+# Model Configuration
+model:
+  name: "openai/whisper-small"
+  language: "Persian"
+  task: "transcribe"
+
+# Training Configuration
+training:
+  learning_rate: 3e-5
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 2
+  max_steps: 500
+  warmup_steps: 100
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+
+# Evaluation Configuration
+evaluation:
+  eval_strategy: "steps"
+  eval_steps: 50
+  save_steps: 50
+  logging_steps: 5
+  generation_max_length: 225
+  predict_with_generate: true
+  load_best_model_at_end: true
+  metric_for_best_model: "wer"
+  greater_is_better: false
+
+# Output Configuration
+output:
+  output_dir: "./whisper-small-persian"
+  push_to_hub: true
+  run_name: "whisper-small-persian"
+
+# Logging Configuration
+logging:
+  report_to: ["wandb"]
+
+# Hub Configuration
+hub:
+  dataset_tags: "MohammadGholizadeh/fleurs-farsi"
+  dataset_name: "Fleurs Farsi"
+  language_code: "fa"
+  model_name: "Whisper Small Persian"
+  finetuned_from: "openai/whisper-small"
+  tasks: "automatic-speech-recognition"
+
+# Processing Configuration
+processing:
+  num_proc: 8
