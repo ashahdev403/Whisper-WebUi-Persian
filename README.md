@@ -120,16 +120,54 @@ The model achieves **25.8% WER** on the FLEURS Farsi evaluation set, representin
 
 Reduce model size and memory usage for local deployment:
 
+### Quick Quantization
+
 ```bash
-python quantize_and_push.py
+# Quantize to 8-bit and save locally
+python quantize_and_push.py \
+    --model_id "AmirMohseni/whisper-small-persian" \
+    --precision "int8" \
+    --output_dir "./whisper-small-persian-int8"
+
+# Quantize to bfloat16 and push to Hub
+python quantize_and_push.py \
+    --model_id "AmirMohseni/whisper-small-persian" \
+    --precision "bf16" \
+    --output_dir "./whisper-small-persian-bf16" \
+    --push_to_hub \
+    --hub_model_id "your-username/whisper-small-persian-bf16"
+```
+
+### Quantization Options
+
+| Precision | Memory Reduction | Speed | Quality Loss | Use Case |
+|-----------|------------------|-------|--------------|----------|
+| **bf16** | ~50% | Fast | Medium | Best balance for most users |
+| **int8** | ~75% | Fast | High | Maximum memory savings |
+
+### Complete Example
+
+```bash
+# 1. Quantize and deploy
+python quantize_and_push.py \
+    --model_id "AmirMohseni/whisper-small-persian" \
+    --precision "int8" \
+    --output_dir "./quantized-model" \
+    --push_to_hub \
+    --hub_model_id "your-username/whisper-small-persian-int8"
+
+# 2. Use the quantized model
+from transformers import pipeline
+pipe = pipeline("automatic-speech-recognition",
+                model="your-username/whisper-small-persian-int8")
 ```
 
 **What it does:**
 - ✅ Loads your fine-tuned model
-- ✅ Applies 16-bit and 8-bit quantization (reduces memory by ~50%)
+- ✅ Applies quantization (reduces memory usage significantly)
 - ✅ Saves quantized model locally
-- ✅ Uploads to Hugging Face Hub
-- ✅ Enables efficient CPU inference
+- ✅ Optionally uploads to Hugging Face Hub
+- ✅ Enables efficient CPU/GPU inference
 
 ## Usage
 
