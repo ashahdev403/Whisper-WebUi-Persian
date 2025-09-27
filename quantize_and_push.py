@@ -25,9 +25,15 @@ def quantize_model(model_id: str, precision: str, output_dir: str):
     # Apply the specified quantization
     if precision == 'bf16':
         print("Loading fp32 model for bf16 conversion...")
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, torch_dtype=torch.bfloat16)
         # Save with bf16 dtype
-        model.save_pretrained(output_dir, torch_dtype=torch.bfloat16)
+        model.save_pretrained(output_dir)
+        
+    elif precision == 'fp16':
+        print("Loading fp32 model for fp16 conversion...")
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, torch_dtype=torch.float16)
+        # Save with fp16 dtype
+        model.save_pretrained(output_dir)
         
     elif precision == 'int8':
         quantization_config = BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=["proj_out"])
@@ -41,7 +47,7 @@ def quantize_model(model_id: str, precision: str, output_dir: str):
         model.save_pretrained(output_dir)
         
     else:
-        raise ValueError("Invalid precision. Choose 'bf16' or 'int8'.")
+        raise ValueError("Invalid precision. Choose 'bf16', 'fp16', or 'int8'.")
 
     # Save the processor to the same directory
     processor.save_pretrained(output_dir)
@@ -81,7 +87,7 @@ if __name__ == "__main__":
     
     # --- Arguments ---
     parser.add_argument("--model_id", type=str, default="AmirMohseni/whisper-small-persian", help="HF model ID.")
-    parser.add_argument("--precision", type=str, choices=['bf16', 'int8'], required=True, help="Target precision.")
+    parser.add_argument("--precision", type=str, choices=['bf16', 'fp16', 'int8'], required=True, help="Target precision.")
     parser.add_argument("--output_dir", type=str, required=True, help="Local directory to save the model.")
     parser.add_argument("--push_to_hub", action='store_true', help="Flag to push the model to the Hub after quantization.")
     parser.add_argument("--hub_model_id", type=str, help="Repo ID for the Hub (e.g., YourUsername/MyModel).")

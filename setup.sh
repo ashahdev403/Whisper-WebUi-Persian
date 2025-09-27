@@ -18,6 +18,9 @@ source .venv/bin/activate
 echo "📚 Installing dependencies..."
 uv pip install -r requirements.txt
 
+echo "🔧 Installing bitsandbytes for quantization support..."
+uv pip install -U bitsandbytes
+
 echo "🔐 Setting up environment file..."
 if [ ! -f .env.example ]; then
     echo "⚠️  .env.example not found, creating basic .env file..."
