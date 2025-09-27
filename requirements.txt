@@ -8,3 +8,6 @@ wandb
 torch
 numpy
 pyyaml
+python-dotenv
+huggingface-hub
+bitsandbytes

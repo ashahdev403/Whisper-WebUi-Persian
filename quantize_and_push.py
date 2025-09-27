@@ -1,8 +1,11 @@
 import torch
 import argparse
 import os
+from dotenv import load_dotenv
 from huggingface_hub import login, create_repo, upload_folder
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, BitsAndBytesConfig
+
+load_dotenv()
 
 def quantize_model(model_id: str, precision: str, output_dir: str):
     """
