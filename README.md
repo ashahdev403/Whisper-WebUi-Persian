@@ -1,4 +1,4 @@
-# Whisper Persian
+# Whisper WebUI Persian
 
 Fine-tune Whisper for Persian speech recognition, then actually use it — on long recordings, video
 files, YouTube links and batch jobs — from one repository.
@@ -10,9 +10,10 @@ The project has two halves:
 | **Transcription** | Full-featured WebUI and CLI: VAD, long-form audio, video, URLs, speaker diarization, SRT/VTT/TXT/JSON output, multi-GPU | `app.py`, `cli.py` |
 | **Training** | Fine-tune Whisper on the FLEURS Farsi dataset, evaluate WER, quantize and publish to the Hub | `training/` |
 
-The transcription half is a fork of [whisper-webui](https://gitlab.com/aadnk/whisper-webui) by
-Kristian S. Stangeland, extended with a **`transformers` backend** so the fine-tuned Persian models
-load directly from HuggingFace — no `.pt` or CTranslate2 conversion step. See [NOTICE](NOTICE).
+The transcription half is built on code from [whisper-webui](https://gitlab.com/aadnk/whisper-webui)
+by Kristian S. Stangeland (Apache-2.0), extended here with a **`transformers` backend** so the
+fine-tuned Persian models load directly from HuggingFace — no `.pt` or CTranslate2 conversion step.
+See [NOTICE](NOTICE).
 
 ## 🚀 Quick Start
 
@@ -219,8 +220,8 @@ The UI disables the diarization checkboxes automatically when the libraries are 
 ## 📦 Docker
 
 ```bash
-docker build -t whisper-persian .
-docker run -d --gpus all -p 7860:7860 -v whisper-cache:/root/.cache whisper-persian
+docker build -t whisper-webui-persian .
+docker run -d --gpus all -p 7860:7860 -v whisper-cache:/root/.cache whisper-webui-persian
 ```
 
 Mount `/root/.cache` so the models are downloaded only once.

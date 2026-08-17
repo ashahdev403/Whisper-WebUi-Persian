@@ -8,11 +8,9 @@ Then run these three cells.
 **1. Check out the project**
 
 ```python
-!git clone --branch feature/merge-whisper-webui https://github.com/ashahdev403/Whisper-WebUi-Persian.git
+!git clone https://github.com/ashahdev403/Whisper-WebUi-Persian.git
 %cd Whisper-WebUi-Persian
 ```
-
-(Drop the `--branch` flag once the merge has landed on `main`.)
 
 **2. Install dependencies**
 
