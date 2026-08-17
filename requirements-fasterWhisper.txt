@@ -1,0 +1,12 @@
+# The faster-whisper backend (--whisper_implementation faster-whisper). Fastest option on GPU.
+#
+# faster-whisper only loads CTranslate2 models, so a fine-tuned HuggingFace model has to be
+# converted first and then added to config.json5 as a local path:
+#
+#   ct2-transformers-converter --model AmirMohseni/whisper-small-persian \
+#       --output_dir ./whisper-small-persian-ct2 --quantization float16
+
+-r requirements.txt
+
+ctranslate2
+faster-whisper

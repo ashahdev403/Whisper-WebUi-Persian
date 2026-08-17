@@ -1,0 +1,25 @@
+Whisper Persian
+Copyright 2025 Whisper Persian contributors
+
+This product includes software developed as part of Whisper-WebUI
+(https://gitlab.com/aadnk/whisper-webui), Copyright Kristian S. Stangeland,
+licensed under the Apache License, Version 2.0.
+
+The following parts of this repository originate from that project and were
+modified here (a "transformers" backend was added, the UI was ported to
+Gradio 5, and the model list and defaults were changed for Persian):
+
+  app.py
+  cli.py
+  app-local.py, app-network.py, app-shared.py
+  config.json5
+  dockerfile
+  src/
+  tests/
+  docs/options.md, docs/colab.md
+
+src/conversion/hf_converter.py is in turn derived from
+https://github.com/bayartsogt-ya/whisper-multiple-hf-datasets
+
+Whisper itself is Copyright OpenAI, licensed under the MIT License
+(https://github.com/openai/whisper).

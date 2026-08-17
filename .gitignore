@@ -2,5 +2,15 @@
 .venv
 
 models/
+whisper-small-persian*/
+whisper-large-v3-persian*/
+quantized-model/
+output/
 
 .gradio/
+flagged/
+wandb/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/

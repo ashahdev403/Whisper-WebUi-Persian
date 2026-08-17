@@ -1,100 +1,170 @@
-# Whisper Persian Fine-tuning
+# Whisper Persian
 
-A guide for training and deploying your own Whisper model for Persian speech recognition. This repository demonstrates the complete pipeline: from fine-tuning on the FLEURS Farsi dataset to quantization for efficient local inference.
+Fine-tune Whisper for Persian speech recognition, then actually use it — on long recordings, video
+files, YouTube links and batch jobs — from one repository.
+
+The project has two halves:
+
+| | What it does | Entry point |
+|---|---|---|
+| **Transcription** | Full-featured WebUI and CLI: VAD, long-form audio, video, URLs, speaker diarization, SRT/VTT/TXT/JSON output, multi-GPU | `app.py`, `cli.py` |
+| **Training** | Fine-tune Whisper on the FLEURS Farsi dataset, evaluate WER, quantize and publish to the Hub | `training/` |
+
+The transcription half is a fork of [whisper-webui](https://gitlab.com/aadnk/whisper-webui) by
+Kristian S. Stangeland, extended with a **`transformers` backend** so the fine-tuned Persian models
+load directly from HuggingFace — no `.pt` or CTranslate2 conversion step. See [NOTICE](NOTICE).
 
 ## 🚀 Quick Start
 
-- **Live Demo**: [Try the model online](https://huggingface.co/spaces/AmirMohseni/Whisper-small-Farsi)
-- **Trained Model**: [Download from Hugging Face](https://huggingface.co/AmirMohseni/whisper-small-persian)
-
-## 📋 Prerequisites
-
-### Quick Setup (Recommended)
-
-Run the automated setup script:
-
 ```bash
-chmod +x setup.sh
 ./setup.sh
+python app.py
 ```
 
-This will:
-- ✅ Create and activate a virtual environment
-- ✅ Install all required dependencies
-- ✅ Create `.env` file from template
-- ✅ Set up your environment for training
+Then open <http://localhost:7860>, pick **Persian Small** or **Persian Large v3**, drop in a file,
+and press Submit.
 
-### Manual Setup (Alternative)
+ffmpeg must be on your PATH — everything decodes audio through it.
+
+### Manual setup
 
 ```bash
-# Create and activate virtual environment
 uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
-
-# Set up environment file
-cp .env.example .env
-# Edit .env file with your Hugging Face token
+cp .env.example .env        # only needed for publishing models to the Hub
 ```
 
-### Authentication
+## 🎧 Transcribing
 
-**You need a Hugging Face token to publish models:**
+### WebUI
 
-1. Go to [Hugging Face Settings > Tokens](https://huggingface.co/settings/tokens)
-2. Create a new token with "Write" permissions
-3. Add it to your `.env` file:
-   ```bash
-   HF_TOKEN=your_actual_token_here
-   ```
+```bash
+python app.py
+```
 
-The setup script will create the `.env` file for you, just replace `your_token_here` with your actual token.
+Three tabs:
+
+- **Simple** — model, language, file/URL/microphone, VAD, diarization.
+- **Full** — everything above plus decoding parameters (beam size, temperature fallback, thresholds,
+  initial prompt, word timestamps).
+- **Extra** — re-run diarization or word highlighting over an existing JSON/SRT without transcribing again.
+
+Variants: `app-local.py` (no length limit), `app-network.py` (binds `0.0.0.0`), `app-shared.py`
+(public Gradio link).
+
+### CLI
+
+```bash
+# One file
+python cli.py meeting.mp4 --model "Persian Small" --output_dir ./out
+
+# A whole directory, on the GPU, in bf16
+python cli.py recordings/*.mp3 --model "Persian Large v3" --compute_type bfloat16 --vad silero-vad
+
+# Straight from YouTube
+python cli.py "https://www.youtube.com/watch?v=..." --model "Persian Small"
+```
+
+Each input produces `-subs.srt`, `-subs.vtt`, `-transcript.txt` and `-result.json`.
+
+### Why long files work
+
+Whisper's encoder takes a fixed 30-second window, so a naive `pipe(audio)` call silently truncates
+anything longer. This project handles length in two layers:
+
+1. **Silero VAD** splits the audio on speech boundaries and feeds Whisper one utterance at a time,
+   carrying the previous text forward as a prompt. This is the `--vad silero-vad` default and is
+   what you want for anything over a few minutes.
+2. The `transformers` backend then uses **sequential long-form decoding** for whatever it receives,
+   so even with VAD off a two-hour file is transcribed in full.
+
+There is no upper bound on input length — `input_audio_max_duration` is set to `-1` in
+`config.json5`.
+
+## 🧠 Backends
+
+Set with `--whisper_implementation` or `whisper_implementation` in `config.json5`.
+
+| Backend | Model format | Install | Use it when |
+|---|---|---|---|
+| **`transformers`** (default) | HuggingFace checkpoints | `requirements.txt` | You want the fine-tuned Persian models, or any HF Whisper checkpoint, with no conversion |
+| `whisper` | OpenAI `.pt` | `requirements-whisper.txt` | You want the reference implementation; HF models are auto-converted on first use |
+| `faster-whisper` | CTranslate2 | `requirements-fasterWhisper.txt` | Maximum GPU throughput, and you don't mind converting first |
+
+To use a Persian model with `faster-whisper`, convert it once:
+
+```bash
+ct2-transformers-converter --model AmirMohseni/whisper-small-persian --output_dir ./whisper-small-persian-ct2 --quantization float16
+```
+
+then add the output directory to `config.json5`.
+
+### Adding your own model
+
+Append an entry to `models` in `config.json5` — a Hub id or a local directory both work:
+
+```json5
+{
+    "name": "Persian Small (mine)",
+    "url": "./whisper-small-persian",   // or "your-username/whisper-small-persian"
+    "type": "transformers",
+    "language": "Persian",
+    // 0 = sequential long-form decoding (most accurate).
+    // Set to 30 with a batch_size for faster, slightly less accurate chunked decoding on GPU.
+    "chunk_length_s": 0,
+    "batch_size": 1,
+}
+```
+
+### Precision
+
+`--compute_type` accepts `auto` (float16 on GPU, float32 on CPU), `float32`, `float16`, `bfloat16`
+and `int8`. The published Persian models are already bf16; `int8` loads through bitsandbytes and
+needs a CUDA GPU.
 
 ## 🎯 Training
 
-### Quick Start
-
 ```bash
-python whisper_trainer.py
+python training/whisper_trainer.py
 ```
 
-### Configuration
-
-Customize training by editing `configs.yaml`:
+Customize via `training/configs.yaml`:
 
 ```yaml
-# Dataset settings
 dataset:
   name: "MohammadGholizadeh/fleurs-farsi"
-  train_split: "train[:50%]"  # 50% of training data
-  test_split: "dev[:50%]"    # 50% of dev data
+  train_split: "train[:50%]"
+  test_split: "dev[:50%]"
 
-# Training parameters
 training:
   learning_rate: 3e-5
   per_device_train_batch_size: 32
   max_steps: 500
   warmup_steps: 100
 
-# Output settings
 output:
   output_dir: "./whisper-small-persian"
   push_to_hub: true
 ```
 
-**Key Parameters:**
-- `learning_rate`: Controls training speed (try 1e-5 to 5e-5)
-- `max_steps`: Training duration (500 steps ≈ 2 hours on L4 GPU)
-- `per_device_train_batch_size`: Memory vs speed trade-off
-- `push_to_hub`: Set to `false` for local-only training
+**Key parameters:**
+- `learning_rate` — controls training speed (try 1e-5 to 5e-5)
+- `max_steps` — training duration (500 steps ≈ 2 hours on an L4)
+- `per_device_train_batch_size` — memory vs. speed trade-off
+- `push_to_hub` — set to `false` for local-only training
 
-## 📊 Training Results
+Publishing to the Hub needs a write token in `.env`:
 
-The model achieves **25.8% WER** on the FLEURS Farsi evaluation set, representing a significant improvement over the base Whisper model.
+```bash
+HF_TOKEN=your_actual_token_here
+```
 
-### Training Progress
+Get one from [Hugging Face Settings > Tokens](https://huggingface.co/settings/tokens).
+
+### Results
+
+The model reaches **25.8% WER** on the FLEURS Farsi evaluation set.
 
 | Step | Training Loss | Validation Loss | WER    | Epoch |
 |------|---------------|-----------------|--------|-------|
@@ -109,28 +179,17 @@ The model achieves **25.8% WER** on the FLEURS Farsi evaluation set, representin
 | 450  | 0.0007       | 0.3807         | 25.99% | 18.0  |
 | **500** | **0.0006**   | **0.3818**     | **25.82%** | **20.0** |
 
-*Final performance: 25.8% WER with 0.38 validation loss*
-
-### Training Curves
-
-![Training Loss](docs/whisper-loss.png)
-![Evaluation WER](docs/whisper-eval-wer.png)
-
-## 🔧 Quantization & Deployment
-
-Reduce model size and memory usage for local deployment:
-
-### Quick Quantization
+## 🔧 Quantization
 
 ```bash
-# Quantize to 8-bit and save locally
-python quantize_and_push.py \
+# 8-bit, saved locally
+python training/quantize_and_push.py \
     --model_id "AmirMohseni/whisper-small-persian" \
     --precision "int8" \
     --output_dir "./whisper-small-persian-int8"
 
-# Quantize to bfloat16 and push to Hub
-python quantize_and_push.py \
+# bfloat16, pushed to the Hub
+python training/quantize_and_push.py \
     --model_id "AmirMohseni/whisper-small-persian" \
     --precision "bf16" \
     --output_dir "./whisper-small-persian-bf16" \
@@ -138,123 +197,67 @@ python quantize_and_push.py \
     --hub_model_id "your-username/whisper-small-persian-bf16"
 ```
 
-### Quantization Options
-
 | Precision | Memory Reduction | Speed | Quality Loss | Use Case |
 |-----------|------------------|-------|--------------|----------|
 | **bf16** | ~50% | Fast | Medium | Best balance for most users |
 | **int8** | ~75% | Fast | High | Maximum memory savings |
 
-### Complete Example
+The output directory can be dropped straight into `config.json5` as a `"transformers"` model.
+
+## 🗣️ Speaker diarization
+
+Optional, and off by default. It needs extra libraries and a HuggingFace token that has accepted the
+`pyannote/speaker-diarization` model terms:
 
 ```bash
-# 1. Quantize and deploy
-python quantize_and_push.py \
-    --model_id "AmirMohseni/whisper-small-persian" \
-    --precision "int8" \
-    --output_dir "./quantized-model" \
-    --push_to_hub \
-    --hub_model_id "your-username/whisper-small-persian-int8"
-
-# 2. Use the quantized model
-from transformers import pipeline
-pipe = pipeline("automatic-speech-recognition",
-                model="your-username/whisper-small-persian-int8")
+pip install -r src/diarization/requirements.txt
+python app.py --auth_token YOUR_TOKEN --diarization True
 ```
 
-**What it does:**
-- ✅ Loads your fine-tuned model
-- ✅ Applies quantization (reduces memory usage significantly)
-- ✅ Saves quantized model locally
-- ✅ Optionally uploads to Hugging Face Hub
-- ✅ Enables efficient CPU/GPU inference
+The UI disables the diarization checkboxes automatically when the libraries are missing.
 
-## Usage
+## 📦 Docker
 
-### Basic Usage
-
-```python
-from transformers import pipeline
-
-# Load the fine-tuned model
-pipe = pipeline("automatic-speech-recognition", model="AmirMohseni/whisper-small-persian")
-
-# Transcribe audio file
-result = pipe("path/to/audio.wav")
-print(result["text"])  # Persian transcription
+```bash
+docker build -t whisper-persian .
+docker run -d --gpus all -p 7860:7860 -v whisper-cache:/root/.cache whisper-persian
 ```
 
-### Advanced Usage with Custom Settings
+Mount `/root/.cache` so the models are downloaded only once.
 
-```python
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-import torch
+## 🧩 Other entry points
 
-# Load model and processor
-model = AutoModelForSpeechSeq2Seq.from_pretrained("AmirMohseni/whisper-small-persian")
-processor = AutoProcessor.from_pretrained("AmirMohseni/whisper-small-persian")
-
-# Process audio and generate transcription
-inputs = processor(audio, sampling_rate=16000, return_tensors="pt")
-with torch.no_grad():
-    generated_ids = model.generate(inputs["input_features"])
-
-transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-print(transcription)
-```
-
-### Batch Processing
-
-```python
-import os
-from pathlib import Path
-
-# Process multiple audio files
-audio_dir = Path("audio_files/")
-results = []
-
-for audio_file in audio_dir.glob("*.wav"):
-    result = pipe(str(audio_file))
-    results.append({
-        "file": audio_file.name,
-        "text": result["text"]
-    })
-
-# Save results
-import json
-with open("transcriptions.json", "w", encoding="utf-8") as f:
-    json.dump(results, f, ensure_ascii=False, indent=2)
-```
+- `colab_webui.ipynb` — run the whole thing on a free Colab GPU, no local install. See
+  [docs/colab.md](docs/colab.md).
+- `simple_app.py` — a single-file Gradio app with no VAD, no URL download and no diarization. Useful
+  as a minimal example or on machines where you don't want the full dependency set.
 
 ## 🔍 Troubleshooting
 
-### Common Issues
+**Only the first 30 seconds are transcribed**
+You are running a bare `pipeline(...)` call somewhere instead of `app.py`/`cli.py`. Whisper's encoder
+is fixed at 30 seconds; long audio needs VAD or long-form decoding, which both entry points do by default.
 
-**CUDA Out of Memory:**
+**CUDA out of memory during transcription**
+Use a smaller model, `--compute_type int8`, or lower `vad_max_merge_size`.
+
+**CUDA out of memory during training**
 ```yaml
-# Reduce in configs.yaml
 training:
   per_device_train_batch_size: 16  # or 8
   gradient_accumulation_steps: 4    # increase accordingly
 ```
 
-**Slow Training:**
-- Use a GPU with more VRAM
-- Reduce `max_steps` for faster experimentation
-- Increase `per_device_train_batch_size` (if memory allows)
+**Word timestamps produce a warning**
+Not every fine-tuned checkpoint ships the cross-attention alignment heads that word-level timestamps
+need. The backend falls back to segment-level timestamps and says so in the log.
 
-**Poor Model Performance:**
-- Try different learning rates (1e-5 to 5e-5)
-- Increase `max_steps` for more training
-- Use more training data (remove `[:50%]` splits)
+**Poor accuracy**
+- Try `Persian Large v3` instead of `Persian Small`
+- Keep VAD enabled — it prevents the model from drifting on long silences
+- Put a few domain words in the **Initial Prompt** field
+- For training: more steps, more data (drop the `[:50%]` splits), different learning rates
 
-**Quantization Issues:**
-- Ensure you have enough RAM for quantization (model loads into memory)
-- Check that `bitsandbytes` is properly installed
-- Use the quantized model for inference, not the full-precision version
+## 📄 License
 
-### Getting Help
-
-- Check the [Whisper documentation](https://huggingface.co/docs/transformers/model_doc/whisper)
-- Review training logs for error messages
-- Validate your `configs.yaml` syntax with a YAML validator
+Apache License 2.0 — see [LICENSE.md](LICENSE.md) and [NOTICE](NOTICE).

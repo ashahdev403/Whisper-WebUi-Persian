@@ -1,0 +1,8 @@
+# The original OpenAI Whisper backend (--whisper_implementation whisper).
+#
+# Fine-tuned HuggingFace models are converted to an OpenAI .pt checkpoint on first use, so entries
+# in config.json5 must be marked with "type": "huggingface" (or "transformers") to work here.
+
+-r requirements.txt
+
+openai-whisper

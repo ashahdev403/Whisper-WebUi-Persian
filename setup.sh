@@ -1,12 +1,20 @@
 #!/bin/bash
 
-echo "🚀 Setting up Whisper Persian training environment..."
+echo "🚀 Setting up the Whisper Persian environment..."
 
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
     echo "❌ uv is not installed. Please install uv first:"
     echo "   curl -LsSf https://astral.sh/uv/install.sh | sh"
     exit 1
+fi
+
+# ffmpeg is required to decode audio and video, and to download from URLs
+if ! command -v ffmpeg &> /dev/null; then
+    echo "⚠️  ffmpeg was not found on your PATH. The WebUI and CLI need it to read media files."
+    echo "   Ubuntu/Debian: sudo apt install ffmpeg"
+    echo "   macOS:         brew install ffmpeg"
+    echo "   Windows:       winget install Gyan.FFmpeg"
 fi
 
 echo "📦 Creating virtual environment..."
@@ -17,9 +25,6 @@ source .venv/bin/activate
 
 echo "📚 Installing dependencies..."
 uv pip install -r requirements.txt
-
-echo "🔧 Installing bitsandbytes for quantization support..."
-uv pip install -U bitsandbytes
 
 echo "🔐 Setting up environment file..."
 if [ ! -f .env.example ]; then
@@ -35,7 +40,10 @@ echo "✅ Setup complete!"
 echo ""
 echo "🔑 Next steps:"
 echo "   1. Edit .env file and replace 'your_token_here' with your Hugging Face token"
+echo "      (only needed to publish models - transcription works without it)"
 echo "   2. Get your token from: https://huggingface.co/settings/tokens"
-echo "   3. Run: python whisper_trainer.py"
 echo ""
-echo "🎯 You're ready to train your Whisper model!"
+echo "🎧 To transcribe:      python app.py"
+echo "🖥️  To batch transcribe: python cli.py audio.mp3 --model 'Persian Small'"
+echo "🎯 To train:           python training/whisper_trainer.py"
+echo ""

@@ -1,13 +1,38 @@
-transformers==4.48.0
-datasets[audio]
+# Default install: the WebUI + CLI running on the "transformers" backend, plus the training and
+# quantization scripts under training/.
+#
+# The other two backends are opt-in, because they need model formats this one does not:
+#   pip install -r requirements-whisper.txt        # OpenAI whisper (.pt checkpoints)
+#   pip install -r requirements-fasterWhisper.txt  # faster-whisper (CTranslate2 models)
+#   pip install -r src/diarization/requirements.txt  # speaker diarization
+
+# --- Model runtime ---
+transformers>=4.48.0
+torch
+torchaudio
 accelerate
+numpy
+
+# --- WebUI / CLI ---
+gradio>=5.0.0
+ffmpeg-python==0.2.0
+yt-dlp
+json5
+more-itertools
+altair
+
+# --- Training and evaluation (training/whisper_trainer.py) ---
+datasets[audio]
 evaluate
 jiwer
-gradio
 wandb
-torch
-numpy
 pyyaml
 python-dotenv
 huggingface-hub
+
+# --- Quantization (training/quantize_and_push.py) ---
 bitsandbytes
+
+# --- Subtitle and diarization helpers ---
+intervaltree
+srt

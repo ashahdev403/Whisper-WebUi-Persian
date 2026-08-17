@@ -24,7 +24,11 @@ from transformers import (
 )
 
 
-def load_config(config_path="configs.yaml"):
+# Resolve the config next to this script, so the trainer can be started from the repository root
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs.yaml")
+
+
+def load_config(config_path=DEFAULT_CONFIG_PATH):
     """Load configuration from YAML file"""
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
