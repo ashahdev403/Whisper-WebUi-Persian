@@ -1,45 +1,47 @@
 # Running on Google Colab
 
-If you don't have a GPU locally, Colab is the easiest way to run the full WebUI against the Persian
-models. Set the runtime to a GPU first: **Runtime → Change runtime type → Hardware accelerator → GPU**.
+Use **`colab_webui.ipynb`** in the repository root — open it directly:
 
-Then run these three cells.
-
-**1. Check out the project**
-
-```python
-!git clone https://github.com/ashahdev403/Whisper-WebUi-Persian.git
-%cd Whisper-WebUi-Persian
+```
+https://colab.research.google.com/github/ashahdev403/Whisper-WebUi-Persian/blob/main/colab_webui.ipynb
 ```
 
-**2. Install dependencies**
+Set the runtime to a GPU first (**Runtime → Change runtime type → Hardware accelerator → T4 GPU**),
+then run the cells in order. The notebook checks the GPU, clones the project, installs the
+dependencies, converts the Persian models to CTranslate2, writes a config and launches the WebUI on
+a public Gradio link.
 
-Do *not* run `pip install -r requirements.txt` here - it reinstalls torch and can break Colab's CUDA
-build. Colab already ships torch, torchaudio, numpy and ffmpeg, so install only the rest:
+This page only records the decisions behind that notebook, so it does not drift out of sync with it.
 
-```python
-!pip install -q "transformers>=4.48.0" accelerate gradio json5 ffmpeg-python yt-dlp more-itertools altair intervaltree srt
-```
+## Why it does not run `pip install -r requirements.txt`
 
-**3. Launch the WebUI with a public link**
+Colab already ships torch, torchaudio, numpy and ffmpeg, built against its own CUDA. Installing the
+requirements file reinstalls torch and can leave the runtime without working CUDA. The notebook
+installs only the packages Colab is missing.
 
-```python
-!python app-shared.py
-```
+## Why the models are converted
 
-Click the `https://xxxxx.gradio.live` URL that appears next to "Running on public URL". The link
-expires after 72 hours.
+The notebook uses the `faster-whisper` backend, which reads **CTranslate2** models only. The Persian
+models are HuggingFace checkpoints, so they are converted once per session with
+`ct2-transformers-converter`. `float16` is the right quantization on a GPU; `int8` is smaller and
+faster but less accurate.
 
-Notes:
+To skip conversion entirely, set `"whisper_implementation": "transformers"` in the config cell and
+point the model URLs back at the `AmirMohseni/...` repositories. That backend runs HuggingFace
+checkpoints directly, at some cost in GPU speed.
 
-- The first transcription downloads the selected model (~500 MB for Persian Small, ~3 GB for
-  Persian Large v3), so it takes a minute before anything appears.
-- `app-shared.py` removes the audio length limit, so long recordings work.
-- Colab disconnects idle sessions. Go to **Runtime → Manage sessions** and terminate the session
-  when you are done, otherwise it keeps consuming your free compute.
+## Why everything goes through a config file
 
-## Ready-made notebook
+`app-local.py`, `app-network.py` and `app-shared.py` are presets — they call `create_ui` directly and
+**do not parse command line arguments**, so `python app-shared.py --compute_type float16` silently
+ignores the flag. The notebook writes `/content/config.colab.json5`, points `WHISPER_WEBUI_CONFIG`
+at it and runs `app.py`, which keeps the backend, compute type, model list and `share` setting in one
+visible place. The repository's own `config.json5` is left untouched.
 
-`colab_webui.ipynb` in the repository root already contains all of the above, plus a GPU check, a
-config sanity check and a CLI test cell. Open it directly in Colab instead of pasting the cells by
-hand.
+## Things that bite
+
+- **Nothing persists.** `/content/` and the HuggingFace cache are wiped when the runtime resets, so
+  the conversion runs again next session. Mount Drive and convert into a Drive path to avoid it.
+- **The share link is public** for 72 hours or until the cell is stopped. Set `"share": False` if the
+  audio is sensitive.
+- **Idle runtimes get reclaimed.** Runtime → Manage sessions → terminate when you are done.
