@@ -35,11 +35,13 @@ MAX_WORD_SEGMENT_DURATION = 8.0
 class LoadedTransformersModel:
     """Bundles the objects a callback needs - the pipeline plus the processor for prompt encoding."""
 
-    def __init__(self, pipe, processor, torch_dtype, device: str):
+    def __init__(self, pipe, processor, torch_dtype, device: str, max_target_positions: int = 448):
         self.pipe = pipe
         self.processor = processor
         self.torch_dtype = torch_dtype
         self.device = device
+        # Size of the decoder context, which the prompt and the transcript have to share
+        self.max_target_positions = max_target_positions
 
 
 class TransformersWhisperContainer(AbstractWhisperContainer):
@@ -152,7 +154,8 @@ class TransformersWhisperContainer(AbstractWhisperContainer):
             **{dtype_kwarg: torch_dtype},
         )
 
-        return LoadedTransformersModel(pipe, processor, torch_dtype, str(self.device))
+        return LoadedTransformersModel(pipe, processor, torch_dtype, str(self.device),
+                                       getattr(model.config, "max_target_positions", 448))
 
     def create_callback(self, language: str = None, task: str = None,
                         prompt_strategy: AbstractPromptStrategy = None,
@@ -172,6 +175,7 @@ class TransformersWhisperCallback(AbstractWhisperCallback):
         self.decodeOptions = decodeOptions
 
         self._printed_word_timestamp_warning = False
+        self._printed_prompt_warning = False
 
     def invoke(self, audio, segment_index: int, prompt: str, detected_language: str,
                progress_listener: ProgressListener = None):
@@ -311,14 +315,31 @@ class TransformersWhisperCallback(AbstractWhisperCallback):
         if suppress_tokens is not None:
             generate_kwargs["suppress_tokens"] = suppress_tokens
 
-        if initial_prompt:
+        if initial_prompt and self._prompt_is_usable(initial_prompt, decodeOptions):
             try:
                 prompt_ids = loaded.processor.get_prompt_ids(initial_prompt, return_tensors="pt")
+                prompt_ids = _truncate_prompt_ids(prompt_ids, loaded.max_target_positions)
                 generate_kwargs["prompt_ids"] = prompt_ids.to(loaded.device)
             except Exception as e:
                 print("WARNING: could not encode the initial prompt (" + str(e) + ") - ignoring it.")
 
         return generate_kwargs
+
+    def _prompt_is_usable(self, prompt: str, decodeOptions: dict) -> bool:
+        """
+        With VAD enabled the prompt is the previous segment's transcript. When a segment collapses
+        into a repetition loop, feeding that back in drags the next segment down with it.
+        """
+        reason = _degeneracy_reason(prompt)
+
+        if reason is None:
+            return True
+
+        if not self._printed_prompt_warning:
+            print(f"WARNING: ignoring a degenerate prompt ({reason}). The previous segment looped - "
+                  "if this repeats, try disabling 'Condition on previous text'.")
+            self._printed_prompt_warning = True
+        return False
 
     def _resolve_language(self, detected_language: str) -> str:
         """
@@ -331,6 +352,95 @@ class TransformersWhisperCallback(AbstractWhisperCallback):
 
         language = get_language_from_name(name)
         return language.code if language is not None else name
+
+
+# A repetition loop is either one character held down, or one phrase looping back to back. Both
+# thresholds are far outside what running prose produces in any script - deliberately so, because
+# wrongly dropping a prompt costs accuracy on the very segments the prompt was meant to help.
+MAX_CHARACTER_RUN = 25
+MAX_BLOCK_REPEATS = 5
+MAX_BLOCK_PERIOD = 10
+
+
+def _degeneracy_reason(text: str):
+    """
+    Detect a collapsed transcript, returning a short explanation or None if the text looks fine.
+
+    Whisper's own detector is the gzip compression ratio, but that threshold is calibrated on
+    English. Persian is two bytes per character in UTF-8 and scores far higher for the same content,
+    so reusing 2.4 here rejects ordinary Persian prose. These two checks measure repetition directly
+    and behave the same regardless of script.
+    """
+    stripped = text.strip()
+
+    if not stripped:
+        return None
+
+    longest_run = 1
+    current_run = 1
+
+    for previous, current in zip(stripped, stripped[1:]):
+        current_run = current_run + 1 if current == previous else 1
+        longest_run = max(longest_run, current_run)
+
+    if longest_run > MAX_CHARACTER_RUN:
+        return f"the same character repeated {longest_run} times"
+
+    tokens = stripped.split()
+    repeats, phrase = _longest_block_repeat(tokens)
+
+    if repeats > MAX_BLOCK_REPEATS:
+        return f"'{phrase}' repeated {repeats} times in a row"
+
+    return None
+
+
+def _longest_block_repeat(tokens: List[str]):
+    """
+    Find the longest back-to-back repetition of any short phrase, as (repeats, phrase).
+
+    Counting how often a word occurs overall is not enough: a three word phrase looping thirty times
+    still leaves each individual word at only about a third of the text. Consecutive repetition is
+    what actually distinguishes a decoder loop from speech that merely revisits a word.
+    """
+    best_repeats = 1
+    best_phrase = ""
+    total = len(tokens)
+
+    for period in range(1, min(MAX_BLOCK_PERIOD, total // 2) + 1):
+        start = 0
+
+        while start + period <= total:
+            block = tokens[start:start + period]
+            repeats = 1
+            end = start + period
+
+            while end + period <= total and tokens[end:end + period] == block:
+                repeats += 1
+                end += period
+
+            if repeats > best_repeats:
+                best_repeats = repeats
+                best_phrase = " ".join(block)
+
+            start = end if repeats > 1 else start + 1
+
+    return best_repeats, best_phrase
+
+
+def _truncate_prompt_ids(prompt_ids, max_target_positions: int):
+    """
+    The prompt shares the decoder's context window with the transcript it is supposed to condition,
+    so an unbounded prompt leaves no room to generate and `generate()` fails outright. OpenAI's
+    implementation keeps the most recent `n_ctx // 2 - 1` prompt tokens; match that, preserving the
+    leading <|startofprev|> marker.
+    """
+    limit = max(2, (int(max_target_positions) // 2) - 1)
+
+    if prompt_ids.shape[-1] <= limit:
+        return prompt_ids
+
+    return torch.cat([prompt_ids[:1], prompt_ids[-(limit - 1):]])
 
 
 def _dtype_kwarg_name() -> str:
