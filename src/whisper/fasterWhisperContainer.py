@@ -42,23 +42,33 @@ class FasterWhisperContainer(AbstractWhisperContainer):
         model_config = self._get_model_config()
         model_url = model_config.url
 
-        if model_config.type in ["whisper", "huggingface", "hf", "transformers"]:
-            if model_url not in ["tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3"]:
-                raise Exception(
-                    f"The model '{model_config.name}' is not in CTranslate2 format, which is the only format faster-whisper can load. "
-                    "Either select the 'transformers' implementation, which runs HuggingFace checkpoints directly, "
-                    f"or convert the model first: ct2-transformers-converter --model {model_url} --output_dir <dir> --quantization float16")
-            if model_url == "large":
-                # large is an alias for large-v3
-                model_url = "large-v3"
+        if model_url == "large":
+            # large is an alias for large-v3
+            model_url = "large-v3"
 
         device = self.device
 
         if (device is None):
             device = "auto"
 
-        model = WhisperModel(model_url, device=device, compute_type=self.compute_type)
-        return model
+        # faster-whisper only reads CTranslate2 models. An official name, a local CT2 directory and a
+        # HuggingFace repository holding CT2 files all work, so rather than guessing from the name we
+        # let it try. Loading can fail for reasons that have nothing to do with the model - a missing
+        # CUDA library, for instance - so the original error is kept and the conversion hint is only
+        # offered as the most common cause.
+        try:
+            return WhisperModel(model_url, device=device, compute_type=self.compute_type)
+        except Exception as e:
+            raise Exception(
+                f"faster-whisper could not load '{model_config.name}' ({model_url}): {e}\n"
+                "\n"
+                "If this model is a plain HuggingFace checkpoint, that is expected - faster-whisper only reads "
+                "CTranslate2 models. Either switch to the transformers implementation, which runs HuggingFace "
+                "checkpoints directly:\n"
+                "    python app.py --whisper_implementation transformers\n"
+                "or convert the model once and point config.json5 at the result:\n"
+                f"    ct2-transformers-converter --model {model_url} --output_dir ./ct2-model --quantization float16"
+            ) from e
 
     def create_callback(self, language: str = None, task: str = None, 
                         prompt_strategy: AbstractPromptStrategy = None, 
